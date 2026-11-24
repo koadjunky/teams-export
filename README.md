@@ -1,122 +1,39 @@
 # teams-export
 
-Export Microsoft Teams chats and channel history to JSON via the Graph API.
+Get your own Microsoft Teams content out of Teams, in two independent ways:
 
-Supports: 1:1 chats (by contact name/email), group chats (by topic), and channels (by team or channel name).
+| What you want | Tool | How it works | Needs |
+|---|---|---|---|
+| **Chat and channel messages** (1:1 chats, group chats, channels) | [`graph/`](graph/) | Python script calling the Microsoft Graph API | A Graph token with chat/channel read scopes |
+| **Meeting transcripts** | [`meeting-transcript/`](meeting-transcript/) | Userscript that reads the transcript panel in the browser | A browser and Tampermonkey (or the DevTools console) |
 
-## Requirements
+The two tools share nothing: use whichever matches what you need.
+
+Why two? Graph is the clean way to read messages, but meeting transcripts need
+`OnlineMeetingTranscript.Read.All`, which most tenants do not grant to individual users. And when the
+meeting organiser or the tenant disables transcript download, the Teams UI offers no export at all.
+The transcript panel still shows everything you are allowed to read, so the userscript collects it
+from there.
+
+## Chat and channel messages: `graph/`
+
+See [graph/README.md](graph/README.md).
 
 ```bash
+cd graph
 pip install msal requests
+python3 export_teams.py              # prompts for a contact, chat topic or channel name
+python3 transcript.py teams_export_*.json
 ```
 
-## Authentication
+## Meeting transcripts: `meeting-transcript/`
 
-The script uses MSAL device flow. If your tenant blocks the Graph Explorer client ID, get a token manually instead.
+See [meeting-transcript/README.md](meeting-transcript/README.md).
 
-### Getting a token from Graph Explorer
+Install the userscript in Tampermonkey from
+<https://raw.githubusercontent.com/koadjunky/teams-export/main/meeting-transcript/teams-meeting-transcript.user.js>,
+open a meeting's transcript in Teams on the web and click **Export transcript**.
 
-1. Open [Graph Explorer](https://developer.microsoft.com/en-us/graph/graph-explorer) and sign in
-2. Grant the required permissions (see below)
-3. Left panel → **Access token** tab → copy the full token value
-4. Create `.secrets` next to the script:
+## License
 
-```
-TEAMS_TOKEN=eyJ0eXAi...
-```
-
-Token is valid for ~1 hour. When it expires, repeat steps 3–4.
-
-### Required permissions
-
-In Graph Explorer, open the **Modify permissions** tab and consent to:
-
-| Permission | Section in "Modify permissions" | Reason |
-|---|---|---|
-| `User.Read` | **Users** | Basic profile / sign-in |
-| `Chat.Read` | **Microsoft Teams (beta)** | Read 1:1 and group chats |
-| `ChannelMessage.Read.All` | **Microsoft Teams (beta)** | Read channel messages |
-| `Team.ReadBasic.All` | **Users** | List joined teams and channels |
-
-After consenting, sign out and sign back in to Graph Explorer so the new token includes all scopes.
-
-## Usage
-
-```bash
-python3 export_teams.py
-```
-
-Enter a search term when prompted. The script searches in order:
-
-1. **1:1 chats** — by contact display name or email
-2. **Group chats** — by chat topic
-3. **Channels** — by team name or channel name
-
-First match wins. Output is saved to `teams_export_YYYYMMDD_HHMMSS.json`.
-
-## Output format
-
-Full Graph API payload, nothing stripped:
-
-```json
-{
-  "exportedAt": "2024-03-15T09:45:00Z",
-  "type": "chat",
-  "label": "Alice Smith",
-  "chatId": "19:abc123...@unq.gbl.spaces",
-  "messageCount": 342,
-  "messages": [
-    {
-      "id": "1710492131000",
-      "createdDateTime": "2024-03-15T09:42:11Z",
-      "lastModifiedDateTime": "2024-03-15T09:42:11Z",
-      "messageType": "message",
-      "from": {
-        "user": {
-          "displayName": "Alice Smith",
-          "id": "...",
-          "userIdentityType": "aadUser"
-        }
-      },
-      "body": {
-        "contentType": "html",
-        "content": "<p>Good morning</p>"
-      },
-      "attachments": [],
-      "reactions": [],
-      "mentions": []
-    }
-  ]
-}
-```
-
-For channels, `type` is `"channel"` and the payload includes `teamId` and `channelId` instead of `chatId`.
-
-All Graph API fields are preserved: reactions, attachments, mentions, edit history, importance flags, etc.
-
-## Transcript
-
-Extract a readable transcript from an exported JSON:
-
-```bash
-python3 transcript.py teams_export_20240315_094500.json
-```
-
-Output (stdout):
-
-```
-2024-03-15 09:42:11  Alice Smith  Good morning
-2024-03-15 09:43:05  Bob Jones    Morning! Ready for the call?
-```
-
-Pipe to a file or `grep` as needed:
-
-```bash
-python3 transcript.py export.json > transcript.txt
-python3 transcript.py export.json | grep "Alice"
-```
-
-## Notes
-
-- `.secrets` and exported `.json` files are gitignored
-- If MSAL device flow works in your tenant, `.secrets` is optional — the script falls back to device flow automatically
+Apache-2.0, see [LICENSE](LICENSE).
